@@ -1,6 +1,7 @@
 // Import mongoose models for database operations
 const RealtimeSensorData = require("../../v2_Models/RealtimeSensorData");
 const Device = require("../../v2_Models/Device");
+const Region = require("../../v2_Models/Region");
 
 // Import utility functions and constants for real-time calculations
 const {
@@ -8,7 +9,6 @@ const {
   removeEmptyFields,
   haversineKm,
   SEA_LEVEL_RL,
-  DIESEL_PRICE_PER_LITER, // Note: This constant is imported but never used
 } = require("./realtimeCalculations");
 
 /**
@@ -152,7 +152,7 @@ const insertRealtimeData = async (req, res) => {
     ) {
       distance = haversineKm(
         [parseFloat(prevLat), parseFloat(prevLon)],
-        [latitude, longitude]
+        [latitude, longitude],
       );
     }
 
@@ -186,7 +186,7 @@ const insertRealtimeData = async (req, res) => {
       pitch,
       movementNumeric,
       _id,
-      timeDiffHours
+      timeDiffHours,
     );
 
     /*
@@ -259,4 +259,94 @@ const insertRealtimeData = async (req, res) => {
   }
 };
 
-module.exports = { insertRealtimeData };
+
+
+/* this controller use to take companyid and region and give back you last entery as per device in that company and region */
+const fetchDashboardDataby = async (req, res) => {
+  try {
+    const { companyId, region } = req.query;
+
+    if (!companyId || !region) {
+      return res.status(400).json({
+        error: "Company and region are required",
+      });
+    }
+
+    const regionName = region.trim();
+
+    // 1️⃣ Find region belonging to company
+    const regionDoc = await Region.findOne({
+      region_name: regionName,
+      company: companyId,
+    });
+
+    console.log(regionDoc);
+    if (!regionDoc) {
+      return res.status(404).json({
+        error: "Region not found",
+      });
+    }
+
+    // 2️⃣ Find devices in that region
+    const devices = await Device.find({
+      region_id: regionDoc._id,
+    }).select("_id region_id");
+
+    console.log(`🔍 Found ${devices[0]._id} devices in region ${regionName}`);
+
+    if (!devices.length) {
+      return res.status(404).json({
+        error: "No devices found",
+      });
+    }
+
+    // 3️⃣ Fetch latest realtime sensor data for each device
+    const deviceIds = devices.map((d) => d._id);
+
+    console.log(`📡 Fetching realtime data for devices: ${deviceIds}`);
+
+    // MongoDB aggregation pipeline to get latest data point per device
+    const results = await RealtimeSensorData.aggregate([
+      {
+        $match: {
+          "meta.region_id": regionDoc._id,
+          "meta.device_id": { $in: deviceIds },
+        },
+      },
+      {
+        $sort: { timestamp: -1 },
+      },
+      {
+        $group: {
+          _id: "$meta.device_id",
+          device_name: { $first: "$meta.mounted_to" },
+          timestamp: { $first: "$timestamp" },
+          sensors: { $first: "$sensors" },
+        },
+      },
+    ]);
+
+    // ✅ If realtime data exists
+
+    return res.json({
+      status: "success",
+      source: "realtime_sensor_data",
+      company: companyId,
+      region: regionName,
+      totalDevices: results.length,
+      devices: results.map((r) => ({
+        device_id: r._id,
+        device_name: r.device_name,
+        timestamp: r.timestamp,
+        sensors: r.sensors,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
+};
+
+module.exports = { insertRealtimeData, fetchDashboardDataby };

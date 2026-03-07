@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   insertRealtimeData,
+  fetchDashboardDataby
 } = require("../v2_Controllers/Real_Time_Data_Controller/DataController");
 
 
@@ -25,5 +26,8 @@ const {
 //   }
 // }
 router.post("/insert", insertRealtimeData);
+
+// /fetchDashboardDataBy?companyID=5fasarq2342&region=North
+router.get("/fetchDashboardDataBy", fetchDashboardDataby);
 
 module.exports = router;
