@@ -9,7 +9,7 @@ const {
   removeEmptyFields,
   haversineKm,
   SEA_LEVEL_RL,
-} = require("./realtimeCalculations");
+} = require("./realTimeCalculations");
 
 /**
  * Main handler to insert real-time sensor data into the database
@@ -258,8 +258,6 @@ const insertRealtimeData = async (req, res) => {
     });
   }
 };
-
-
 
 /* this controller use to take companyid and region and give back you last entery as per device in that company and region */
 const fetchDashboardDataby = async (req, res) => {

@@ -117,10 +117,23 @@ function removeEmptyFields(obj) {
   });
   return obj;
 }
+function formatIST(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
+
 module.exports = {
   calculateFuelAndCost,
   removeEmptyFields,
   haversineKm,
+  formatIST,
   SEA_LEVEL_RL,
   DIESEL_PRICE_PER_LITER,
 };

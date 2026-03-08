@@ -99,11 +99,12 @@ const authenticateToken = require("./v2_Middlewares/authMiddleware");
 // 🔥 MUST COME BEFORE app.use()
 const connectMongoDB = require("./dao/database");
 app.use("/v2/auth", authRoutes);
-app.use("/v2/sectorRoutes", require("./v2_Routes/sectorRoutes"));
-app.use("/v2/companyRoutes", require("./v2_Routes/companyRoutes"));
-app.use("/v2/regionsRoutes", require("./v2_Routes/regionRoutes"));
-app.use("/v2/dataRoutes", require("./v2_Routes/dataRoutes"));
-app.use("/v2/deviceRoutes", require("./v2_Routes/devicesRoutes"));
+app.use("/v2/sector", require("./v2_Routes/sectorRoutes"));
+app.use("/v2/company", require("./v2_Routes/companyRoutes"));
+app.use("/v2/regions", require("./v2_Routes/regionRoutes"));
+app.use("/v2/data", require("./v2_Routes/dataRoutes"));
+app.use("/v2/device", require("./v2_Routes/devicesRoutes"));
+app.use("/v2/dailyData", require("./v2_Routes/dailyDataRoutes"));
 
 connectMongoDB();
 
