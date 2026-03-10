@@ -107,7 +107,7 @@ app.use("/v2/device", require("./v2_Routes/devicesRoutes"));
 app.use("/v2/dailyData", require("./v2_Routes/dailyDataRoutes"));
 app.use("/v2/monthlyData", require("./v2_Routes/monthlyDataRoutes"));
 app.use("/v2/getLast10ZAxis", require("./v2_Routes/getLast10ZAxisRoute")); 
-
+app.use("/v2/shiftData", require("./v2_Routes/shiftWiseDataRoutes"));
 connectMongoDB();
 
 // Start server
