@@ -27,7 +27,7 @@ const {
 // }
 router.post("/insert", insertRealtimeData);
 
-// /fetchDashboardDataBy?companyID=5fasarq2342&region=North
+// /fetchDashboardDataBy?companyId=5fasarq2342&region=North
 router.get("/fetchDashboardDataBy", fetchDashboardDataby);
 
 module.exports = router;

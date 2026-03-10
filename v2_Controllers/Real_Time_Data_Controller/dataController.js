@@ -269,7 +269,7 @@ const fetchDashboardDataby = async (req, res) => {
         error: "Company and region are required",
       });
     }
-
+console.log(`📊 Fetching dashboard data for company ${companyId}, region ${region}`);
     const regionName = region.trim();
 
     // 1️⃣ Find region belonging to company
