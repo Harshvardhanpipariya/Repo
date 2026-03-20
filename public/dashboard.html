@@ -956,14 +956,14 @@
 
     <script>
       // ==================== CONFIGURATION ====================
-      const BASE_URL = "http://10.5.48.93:5001";
+      const BASE_URL = "http://10.5.48.93:5001/v2/";
       const params = new URLSearchParams(window.location.search);
       const sector = params.get("sector") || "";
       const company = (params.get("company") || "").trim();
       let region = (params.get("region") || "").trim();
       const device_id = params.get("device_id") || "";
 
-      const API_URL = `${BASE_URL}/fetchDashboardDataby?company=${encodeURIComponent(company)}&sector=${encodeURIComponent(sector)}&region=${encodeURIComponent(region)}&device_id=${encodeURIComponent(device_id)}`;
+      const API_URL = `${BASE_URL}data/fetchDashboardDataBy?companyId=69aaaca38f6729fba2dc7343&region=North Region`;
 
       // Region to region_id mapping
       const regionMapping = {
@@ -990,7 +990,7 @@
 
       // ==================== DOM READY ====================
       document.addEventListener("DOMContentLoaded", () => {
-        if (region === "Kache" || region === "Demo_Region") {
+        if (region === "North Region" || region === "Demo_Region") {
           showOnly(["tile-fuel"]);
           return;
         }
@@ -1245,7 +1245,16 @@
           const res = await fetch(API_URL);
           const json = await res.json();
           console.log("Fetched data:", json);
-          cachedData = json.data || [];
+
+          if (json.data) {
+            cachedData = json.data;
+          } else if (json.devices) {
+            cachedData = json.devices;
+          } else {
+            cachedData = [];
+          }
+
+          console.log("Processed data:", cachedData);
           return cachedData;
         } catch (err) {
           console.error("Failed to fetch data:", err);
@@ -1308,7 +1317,13 @@
       }
 
       // ==================== DEVICE NAME MAPPING ====================
-      const deviceDisplayNames = { D3: "25", D8: "97", D9: "12" };
+      const deviceDisplayNames = {
+        D3: "03",
+        D7: "07",
+        D8: "08",
+        D9: "09",
+        D12: "12",
+      };
 
       function getDisplayName(deviceId) {
         return deviceDisplayNames[deviceId] || deviceId;
@@ -1378,11 +1393,11 @@
         try {
           let url;
           if (reportType === "shift") {
-            url = `${BASE_URL}/getAllDevices-ShiftData?shift=${encodeURIComponent(shift)}&region_id=${region_id}`;
+            url = `${BASE_URL}/analysis?device_id=69aaaf4ca573d48d4516d2b6&timeRange=shift&shift=6am-2pm&region_id=69aaadcaa573d48d4516d2b0`;
           } else if (reportType === "daily") {
-            url = `${BASE_URL}/getAllDevices-DailyData?region_id=${region_id}`;
+            url = `${BASE_URL}/dailyData/allDevices/?region_id=69aaadcaa573d48d4516d2b0`;
           } else if (reportType === "monthly") {
-            url = `${BASE_URL}/getAll-Devices-MonthlyData?region_id=${region_id}`;
+            url = `${BASE_URL}/monthlyData/allDevices?region_id=69aaadcaa573d48d4516d2b0`;
           }
 
           console.log(`📡 Fetching from: ${url}`);
@@ -1391,37 +1406,38 @@
           if (!response.ok)
             throw new Error(`HTTP error! status: ${response.status}`);
 
-          const jsonData = await response.json();
+          const contentType = response.headers.get("content-type");
 
-          if (!jsonData.data || jsonData.data.length === 0) {
-            alert("No data available for the selected period");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            alert(`Analysis failed: ${errorData.error || "Unknown error"}`);
             return;
           }
 
-          const wsData = [];
-          if (jsonData.data.length > 0) {
-            const headers = Object.keys(jsonData.data[0]);
-            wsData.push(headers);
-            jsonData.data.forEach((row) => {
-              wsData.push(headers.map((h) => (row[h] !== null ? row[h] : "")));
-            });
-          }
-
-          const ws = XLSX.utils.aoa_to_sheet(wsData);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, "Report");
+          const blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(blob);
 
           const now = new Date();
           const dateStr = now.toISOString().split("T")[0];
-          let filename = `${region}_${reportType}_${dateStr}.xlsx`;
-          if (reportType === "shift")
-            filename = `${region}_${shift}_${dateStr}.xlsx`;
+          let filename = `Analysis_${region}_${reportType}`;
+          if (reportType === "shift") filename += `_${shift}`;
+          filename += `_${dateStr}.xlsx`;
 
-          XLSX.writeFile(wb, filename);
-          console.log(`✅ Report downloaded: ${filename}`);
+          const a = document.createElement("a");
+          a.href = downloadUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+          }, 100);
+
+          console.log(`✅ Analysis report downloaded: ${filename}`);
         } catch (error) {
-          console.error("Error generating report:", error);
-          alert(`Failed to generate report: ${error.message}`);
+          console.error("Error generating analysis:", error);
+          alert(`Failed to generate analysis: ${error.message}`);
         } finally {
           hideLoading();
         }
@@ -1464,262 +1480,316 @@
 
         if (panelId === "view") {
           container.innerHTML = `
-          <div class="dashboard1">
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-4">Open-Pit and Underground Mining</h2>
-              <div id="chart-blast-areas"></div>
-              <div id="chart-development-meters"></div>
-              <div id="chart-production-meters"></div>
-              <div id="chart-ore-mined"></div>
-            </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-4">Crushing & Processing Plant</h2>
-              <div id="chart-throughput"></div>
-              <div id="chart-crusher-availability"></div>
-              <div id="chart-mill-vibration"></div>
-              <div id="chart-power-consumption"></div>
-            </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-4">Contractor Equipment</h2>
-              <div id="chart-dump-trucks"></div>
-              <div id="chart-excavators"></div>
-              <div id="chart-drills"></div><br><br><br>
-              <div class="flex justify-between mb-2 text-lg"><span>Dump Trucks</span><span class="big-value">88%</span></div>
-              <div class="flex justify-between mb-2 text-lg"><span>Excavators</span><span class="big-value">73%</span></div>
-              <div class="flex justify-between text-lg"><span>Drills</span><span class="big-value">61%</span></div>
-            </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-2">Utilization</h2>
-              <div class="value mb-1">27%</div>
-              <div class="sub-label mb-2">Exploration Completed</div>
-              <canvas id="utilizationChart" height="100"></canvas>
-            </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-2">Exploration</h2>
-              <div class="relative w-32 h-32 mx-auto">
-                <canvas id="explorationPie"></canvas>
-                <div class="absolute inset-0 flex items-center justify-center">
-                  <span class="text-2xl font-bold">27%</span>
-                </div>
-              </div>
-              <div class="mt-4 space-y-1 text-base">
-                <p class="sub-label">Exploration Expenditure <span class="big-value block">$380K</span></p>
-                <p class="sub-label">Higher Utilization <span class="big-value block">10.2%</span></p>
-                <p class="sub-label">Completed Targets <span class="big-value block">22</span></p>
+        <div class="dashboard1">
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-4">Open-Pit and Underground Mining</h2>
+            <div id="chart-blast-areas"></div>
+            <div id="chart-development-meters"></div>
+            <div id="chart-production-meters"></div>
+            <div id="chart-ore-mined"></div>
+          </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-4">Crushing & Processing Plant</h2>
+            <div id="chart-throughput"></div>
+            <div id="chart-crusher-availability"></div>
+            <div id="chart-mill-vibration"></div>
+            <div id="chart-power-consumption"></div>
+          </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-4">Contractor Equipment</h2>
+            <div id="chart-dump-trucks"></div>
+            <div id="chart-excavators"></div>
+            <div id="chart-drills"></div><br><br><br>
+            <div class="flex justify-between mb-2 text-lg"><span>Dump Trucks</span><span class="big-value">88%</span></div>
+            <div class="flex justify-between mb-2 text-lg"><span>Excavators</span><span class="big-value">73%</span></div>
+            <div class="flex justify-between text-lg"><span>Drills</span><span class="big-value">61%</span></div>
+          </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-2">Utilization</h2>
+            <div class="value mb-1">27%</div>
+            <div class="sub-label mb-2">Exploration Completed</div>
+            <canvas id="utilizationChart" height="100"></canvas>
+          </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-2">Exploration</h2>
+            <div class="relative w-32 h-32 mx-auto">
+              <canvas id="explorationPie"></canvas>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="text-2xl font-bold">27%</span>
               </div>
             </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-4">Production vs. Plan</h2>
-              <div class="space-y-3">
-                <div><div class="text-base mb-1">Dump Trucks <span class="float-right font-bold">68%</span></div><div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 68%;"></div></div></div>
-                <div><div class="text-base mb-1">Excavators <span class="float-right font-bold">73%</span></div><div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 73%;"></div></div></div>
-                <div><div class="text-base mb-1">Drills <span class="float-right font-bold">61%</span></div><div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 61%;"></div></div></div>
-                <div><div class="text-base mb-1">Loaders <span class="float-right font-bold">79%</span></div><div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 79%;"></div></div></div>
-              </div>
-            </div>
-            <div class="card">
-              <h2 class="text-lg font-semibold mb-2">Production vs Plan</h2>
-              <canvas id="productionChart" height="120"></canvas>
+            <div class="mt-4 space-y-1 text-base">
+              <p class="sub-label">Exploration Expenditure <span class="big-value block">$380K</span></p>
+              <p class="sub-label">Higher Utilization <span class="big-value block">10.2%</span></p>
+              <p class="sub-label">Completed Targets <span class="big-value block">22</span></p>
             </div>
           </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-4">Production vs. Plan</h2>
+            <div class="space-y-3">
+              <div>
+                <div class="text-base mb-1">Dump Trucks <span class="float-right font-bold">68%</span></div>
+                <div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 68%;"></div></div>
+              </div>
+              <div>
+                <div class="text-base mb-1">Excavators <span class="float-right font-bold">73%</span></div>
+                <div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 73%;"></div></div>
+              </div>
+              <div>
+                <div class="text-base mb-1">Drills <span class="float-right font-bold">61%</span></div>
+                <div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 61%;"></div></div>
+              </div>
+              <div>
+                <div class="text-base mb-1">Loaders <span class="float-right font-bold">79%</span></div>
+                <div class="w-full h-2 bg-gray-800 rounded"><div class="h-2 bg-yellow-400 rounded" style="width: 79%;"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2 class="text-lg font-semibold mb-2">Production vs Plan</h2>
+            <canvas id="productionChart" height="120"></canvas>
+          </div>
         `;
-
           setTimeout(() => {
-            const createChart = (elementId, title, dataField, color, unit) => {
-              const element = document.getElementById(elementId);
-              if (element) {
-                const values = data
-                  .map((d) => d[dataField])
-                  .filter((v) => v !== undefined && v !== null);
-                if (values.length > 0) {
-                  element.appendChild(
-                    makeLineChart(
-                      title,
-                      data.map((d) => d.timestamp),
-                      values,
-                      color,
-                      `${latest[dataField] || 0} ${unit}`,
-                    ),
-                  );
-                }
-              }
-            };
+            const blastChart = document.getElementById("chart-blast-areas");
+            if (blastChart) {
+              blastChart.appendChild(
+                makeLineChart(
+                  "Active Blast Areas",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.active_blast_areas),
+                  "#ff6b6b",
+                  `${latest.active_blast_areas || 0}`,
+                ),
+              );
+            }
 
-            createChart(
-              "chart-blast-areas",
-              "Active Blast Areas",
-              "active_blast_areas",
-              "#ff6b6b",
-              "",
-            );
-            createChart(
+            const devChart = document.getElementById(
               "chart-development-meters",
-              "Development Meters",
-              "development_meters",
-              "#6bcB77",
-              "m",
             );
-            createChart(
+            if (devChart) {
+              devChart.appendChild(
+                makeLineChart(
+                  "Development Meters",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.development_meters),
+                  "#6bcB77",
+                  `${latest.development_meters || 0} m`,
+                ),
+              );
+            }
+
+            const prodChart = document.getElementById(
               "chart-production-meters",
-              "Production Meters",
-              "production_meters",
-              "#4D96FF",
-              "m",
             );
-            createChart(
-              "chart-ore-mined",
-              "Ore Mined",
-              "ore_mined",
-              "#FFC300",
-              "kt",
-            );
-            createChart(
-              "chart-throughput",
-              "Throughput",
-              "throughput",
-              "#AA96DA",
-              "t/hr",
-            );
-            createChart(
+            if (prodChart) {
+              prodChart.appendChild(
+                makeLineChart(
+                  "Production Meters",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.production_meters),
+                  "#4D96FF",
+                  `${latest.production_meters || 0} m`,
+                ),
+              );
+            }
+
+            const oreChart = document.getElementById("chart-ore-mined");
+            if (oreChart) {
+              oreChart.appendChild(
+                makeLineChart(
+                  "Ore Mined",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.ore_mined),
+                  "#FFC300",
+                  `${latest.ore_mined || 0} kt`,
+                ),
+              );
+            }
+
+            const throughputChart = document.getElementById("chart-throughput");
+            if (throughputChart) {
+              throughputChart.appendChild(
+                makeLineChart(
+                  "Throughput",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.throughput),
+                  "#AA96DA",
+                  `${latest.throughput || 0} t/hr`,
+                ),
+              );
+            }
+
+            const crusherChart = document.getElementById(
               "chart-crusher-availability",
-              "Crusher Availability",
-              "crusher_availability",
-              "#F67280",
-              "%",
             );
-            createChart(
-              "chart-mill-vibration",
-              "Mill Vibration",
-              "mill_vibration",
-              "#355C7D",
-              "dB",
-            );
-            createChart(
+            if (crusherChart) {
+              crusherChart.appendChild(
+                makeLineChart(
+                  "Crusher Availability",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.crusher_availability),
+                  "#F67280",
+                  `${latest.crusher_availability || 0} %`,
+                ),
+              );
+            }
+
+            const millChart = document.getElementById("chart-mill-vibration");
+            if (millChart) {
+              millChart.appendChild(
+                makeLineChart(
+                  "Mill Vibration",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.mill_vibration),
+                  "#355C7D",
+                  `${latest.mill_vibration || 0} dB`,
+                ),
+              );
+            }
+
+            const powerChart = document.getElementById(
               "chart-power-consumption",
-              "Power Consumption",
-              "fuel_consumption",
-              "#6bcB77",
-              "kW",
             );
-            createChart(
-              "chart-dump-trucks",
-              "Dump Trucks",
-              "dump_trucks_utilization",
-              "#6bcB77",
-              "%",
-            );
-            createChart(
-              "chart-excavators",
-              "Excavators",
-              "excavators_utilization",
-              "#AA96DA",
-              "%",
-            );
-            createChart(
-              "chart-drills",
-              "Drills",
-              "drills_utilization",
-              "#FFC300",
-              "%",
-            );
+            if (powerChart) {
+              powerChart.appendChild(
+                makeLineChart(
+                  "Power Consumption",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.fuel_consumption),
+                  "#6bcB77",
+                  `${latest.fuel_consumption || 0} kW`,
+                ),
+              );
+            }
+
+            const dumpChart = document.getElementById("chart-dump-trucks");
+            if (dumpChart) {
+              dumpChart.appendChild(
+                makeLineChart(
+                  "Dump Trucks",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.dump_trucks_utilization),
+                  "#6bcB77",
+                  `${latest.dump_trucks_utilization || 0} %`,
+                ),
+              );
+            }
+
+            const excChart = document.getElementById("chart-excavators");
+            if (excChart) {
+              excChart.appendChild(
+                makeLineChart(
+                  "Excavators",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.excavators_utilization),
+                  "#AA96DA",
+                  `${latest.excavators_utilization || 0} %`,
+                ),
+              );
+            }
+
+            const drillsChart = document.getElementById("chart-drills");
+            if (drillsChart) {
+              drillsChart.appendChild(
+                makeLineChart(
+                  "Drills",
+                  data.map((d) => d.timestamp),
+                  data.map((d) => d.drills_utilization),
+                  "#FFC300",
+                  `${latest.drills_utilization || 0} %`,
+                ),
+              );
+            }
 
             const ctxUtil = document
               .getElementById("utilizationChart")
-              ?.getContext("2d");
-            if (ctxUtil) {
-              new Chart(ctxUtil, {
-                type: "bar",
-                data: {
-                  labels: [
-                    "Apr 10",
-                    "Apr 11",
-                    "Apr 12",
-                    "Apr 13",
-                    "Apr 14",
-                    "Apr 15",
-                  ],
-                  datasets: [
-                    {
-                      data: [8, 12, 16, 24, 21, 27],
-                      backgroundColor: "#10b981",
-                      borderRadius: 0,
-                      barThickness: 12,
-                    },
-                  ],
-                },
-                options: {
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    x: { display: false },
-                    y: { beginAtZero: true, display: false },
+              .getContext("2d");
+            new Chart(ctxUtil, {
+              type: "bar",
+              data: {
+                labels: [
+                  "Apr 10",
+                  "Apr 11",
+                  "Apr 12",
+                  "Apr 13",
+                  "Apr 14",
+                  "Apr 15",
+                ],
+                datasets: [
+                  {
+                    data: [8, 12, 16, 24, 21, 27],
+                    backgroundColor: "#10b981",
+                    borderRadius: 0,
+                    barThickness: 12,
                   },
+                ],
+              },
+              options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { display: false },
+                  y: { beginAtZero: true, display: false },
                 },
-              });
-            }
+              },
+            });
 
             const ctxPie = document
               .getElementById("explorationPie")
-              ?.getContext("2d");
-            if (ctxPie) {
-              new Chart(ctxPie, {
-                type: "doughnut",
-                data: {
-                  labels: ["Completed", "Remaining"],
-                  datasets: [
-                    {
-                      data: [27, 73],
-                      backgroundColor: ["#3b82f6", "#333333"],
-                      borderWidth: 0,
-                    },
-                  ],
-                },
-                options: {
-                  cutout: "80%",
-                  plugins: { legend: { display: false } },
-                },
-              });
-            }
+              .getContext("2d");
+            new Chart(ctxPie, {
+              type: "doughnut",
+              data: {
+                labels: ["Completed", "Remaining"],
+                datasets: [
+                  {
+                    data: [27, 73],
+                    backgroundColor: ["#3b82f6", "#333333"],
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                cutout: "80%",
+                plugins: { legend: { display: false } },
+              },
+            });
 
             const ctxProd = document
               .getElementById("productionChart")
-              ?.getContext("2d");
-            if (ctxProd) {
-              new Chart(ctxProd, {
-                type: "bar",
-                data: {
-                  labels: [
-                    "Apr 10",
-                    "Apr 11",
-                    "Apr 12",
-                    "Apr 13",
-                    "Apr 14",
-                    "Apr 15",
-                  ],
-                  datasets: [
-                    {
-                      data: [60, 100, 140, 180, 220, 270],
-                      backgroundColor: "#3b82f6",
-                      borderRadius: 4,
-                      barThickness: 14,
-                    },
-                  ],
-                },
-                options: {
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    x: {
-                      grid: { display: false },
-                      ticks: { color: "#9ca3af" },
-                    },
-                    y: {
-                      grid: { color: "#333333" },
-                      ticks: { color: "#9ca3af" },
-                      beginAtZero: true,
-                    },
+              .getContext("2d");
+            new Chart(ctxProd, {
+              type: "bar",
+              data: {
+                labels: [
+                  "Apr 10",
+                  "Apr 11",
+                  "Apr 12",
+                  "Apr 13",
+                  "Apr 14",
+                  "Apr 15",
+                ],
+                datasets: [
+                  {
+                    data: [60, 100, 140, 180, 220, 270],
+                    backgroundColor: "#3b82f6",
+                    borderRadius: 4,
+                    barThickness: 14,
+                  },
+                ],
+              },
+              options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { grid: { display: false }, ticks: { color: "#9ca3af" } },
+                  y: {
+                    grid: { color: "#333333" },
+                    ticks: { color: "#9ca3af" },
+                    beginAtZero: true,
                   },
                 },
-              });
-            }
+              },
+            });
           }, 0);
         }
 
@@ -1803,7 +1873,7 @@
           const dumpRegion = region;
 
           async function fetchAndRenderChart() {
-            const url = `${BASE_URL}/fetchDashboardDataby?company=${dumpCompany}&sector=${dumpSector}&region=${encodeURIComponent(dumpRegion)}`;
+            const url = `${BASE_URL}v2/data/fetchDashboardDataBy?companyId=69aaaca38f6729fba2dc7343&region=North Region`;
 
             try {
               const res = await fetch(url);
@@ -2948,10 +3018,10 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <strong style="color: #fff;">Hauler and Excavator Summary</strong>
               <select id="haulerSelector" style="background: #0a1920; color: #6ff3d6; border: 1px solid #6ff3d6; border-radius: 4px; padding: 4px 8px; font-size: 12px; font-weight: bold; cursor: pointer;">
-                <option value="D8">D8</option>
-                <option value="D9">D9</option>
-                <option value="D3">D3</option>
-                <option value="D12">D12</option>
+                <option value="D3">25</option>
+                <option value="D8">97</option>
+                <option value="D9">12</option>
+                <option value="D7">07</option>
                 <option value="all">All Haulers</option>
               </select>
             </div>
@@ -3801,7 +3871,6 @@
         },
       };
 
-      // Replace renderFuelGradientForHauler with this:
       async function renderFuelGradientForHauler(
         haulerId,
         forceRefresh = false,
@@ -3826,7 +3895,7 @@
           chartContainer.innerHTML =
             '<div style="color: #6ff3d6; text-align: center; padding: 20px;">Loading fuel data...</div>';
 
-          // ✅ USE EXISTING fetchDashboardDataby DATA
+          // USE EXISTING fetchDashboardDataby DATA
           const mainData = await fetchData();
 
           if (!mainData || mainData.length === 0) {
@@ -3851,7 +3920,7 @@
           const timestamps = recentData.map((d) => d.timestamp);
           const pitchValues = recentData.map((d) => parseFloat(d.pitch) || 0);
 
-          // Calculate fuel consumption based on pitch (your existing formula)
+          // Calculate fuel consumption based on pitch
           const baselineKmpl = haulerId === "D7" ? 0.8 : 1.5;
           const FC0 = 100 * baselineKmpl;
           const fuelValues = pitchValues.map(
@@ -3977,7 +4046,6 @@
         }
       }
 
-      // Replace renderAllHaulersFuelChart with this:
       async function renderAllHaulersFuelChart(forceRefresh = false) {
         try {
           const chartContainer = document.getElementById("fuelChartContainer");
@@ -3997,7 +4065,7 @@
           chartContainer.innerHTML =
             '<div style="color: #6ff3d6; text-align: center; padding: 20px;">Loading fuel data...</div>';
 
-          // ✅ USE EXISTING fetchDashboardDataby DATA
+          // USE EXISTING fetchDashboardDataby DATA
           const mainData = await fetchData();
 
           if (!mainData || mainData.length === 0) {
@@ -4137,7 +4205,13 @@
       async function initializeWhiteMapSimulation() {
         console.trace("initializeWhiteMapSimulation called");
 
-        const deviceDisplayNames = { D3: "25", D8: "97", D9: "12" };
+        const deviceDisplayNames = {
+          D3: "25",
+          D8: "97",
+          D9: "12",
+          D7: "07",
+          D12: "12",
+        };
 
         function getDisplayName(deviceId) {
           return deviceDisplayNames[deviceId] || deviceId;
@@ -4362,11 +4436,17 @@
           }
 
           async function fetchBackendData() {
-            const backendUrl = `${BASE_URL}/fetchDashboardDataby?company=TMC&sector=Mining&region=Kache`;
+            const backendUrl = `${BASE_URL}data/fetchDashboardDataBy?companyId=69aaaca38f6729fba2dc7343&region=North Region`;
             try {
               const resp = await fetch(backendUrl);
               if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               const json = await resp.json();
+
+              console.log("Backend response:", json);
+              console.log(
+                "D7 data:",
+                json.devices?.filter((d) => d.device_id === "D7"),
+              );
 
               if (json.status === "success" && json.devices) {
                 const transformedData = { sites: {} };
@@ -4577,6 +4657,7 @@
           }
 
           function drawPathHistory(selectedHauler = "D3") {
+            // Clear existing layers
             for (const haulerId in pathPolylines) {
               if (pathPolylines[haulerId])
                 map.removeLayer(pathPolylines[haulerId]);
@@ -4609,6 +4690,7 @@
               if (centerPosition) map.setView(centerPosition, 15);
             }
 
+            // Draw path for ALL haulers including D7
             for (const haulerId in pathHistory) {
               if (selectedHauler !== "all" && haulerId !== selectedHauler)
                 continue;
@@ -4620,6 +4702,7 @@
                 pathSegments[haulerId] = [];
                 vehicleMarkers[haulerId] = [];
 
+                // Draw segments between consecutive points
                 for (let i = 1; i < pathHistory[haulerId].length; i++) {
                   const prevPoint = pathHistory[haulerId][i - 1];
                   const currentPoint = pathHistory[haulerId][i];
@@ -4657,7 +4740,7 @@
                     <b>Segment Info:</b><br>
                     • Type: <b style="color:${segmentTypeColor}">${segmentTypeLabel}</b><br>
                     • Gradient Angle: ${getPitchDisplay(currentPoint.pitch)}<br>
-                    • Elevation: ${getMovementLabel(currentPoint.movement)}<br>
+                    • Elevation: ${getMovementLabel(currentPoint.pitch)}<br>
                     • Distance: ${(calc.distance * 1000).toFixed(1)} m<br>
                     • From: ${prevPoint.pos[0].toFixed(6)}, ${prevPoint.pos[1].toFixed(6)}<br>
                     • To: ${currentPoint.pos[0].toFixed(6)}, ${currentPoint.pos[1].toFixed(6)}
@@ -4670,6 +4753,7 @@
                   currentPoint.segmentType = segmentType;
                 }
 
+                // Add markers for each point
                 for (let i = 0; i < pathHistory[haulerId].length; i++) {
                   const point = pathHistory[haulerId][i];
 
@@ -4729,6 +4813,7 @@
                   pathMarkers[haulerId].push(marker);
                 }
 
+                // Add background path polyline
                 pathPolylines[haulerId] = L.polyline(positions, {
                   color: baseColor,
                   weight: 2,
@@ -4763,6 +4848,12 @@
                 </div>
               `);
               }
+            }
+
+            // Add current position markers for all vehicles
+            for (const haulerId in sites) {
+              if (selectedHauler !== "all" && haulerId !== selectedHauler)
+                continue;
 
               if (sites[haulerId] && sites[haulerId].pos) {
                 const s = sites[haulerId];
@@ -4929,7 +5020,7 @@
           let lastDataHash = "",
             isPolling = false,
             isUpdatingUI = false;
-          const POLL_INTERVAL = 10000;
+          const POLL_INTERVAL = 5000; // Reduced to 5 seconds for more frequent updates
           let updateTimeout = null,
             currentSelectedHauler = "D3",
             currentChartHauler = "D3";
@@ -5158,7 +5249,7 @@
             try {
               console.log("🔍 Checking for backend updates...");
               const response = await fetch(
-                `${BASE_URL}/fetchDashboardDataby?company=TMC&sector=Mining&region=Kache`,
+                `${BASE_URL}data/fetchDashboardDataBy?companyId=69aaaca38f6729fba2dc7343&region=North Region`,
               );
               if (!response.ok) {
                 console.warn("Backend not responding");
@@ -5210,13 +5301,15 @@
 
             for (const haulerId in newData.sites) {
               const site = newData.sites[haulerId];
+              console.log(`Processing ${haulerId}:`, site);
+
               if (site.pos && Array.isArray(site.pos)) {
                 if (!pathHistory[haulerId]) pathHistory[haulerId] = [];
 
                 const lastPoint =
                   pathHistory[haulerId][pathHistory[haulerId].length - 1];
                 const shouldAddPoint =
-                  !lastPoint || haversineKm(lastPoint.pos, site.pos) > 0.0005;
+                  !lastPoint || haversineKm(lastPoiant.pos, site.pos) > 0.0001; // Reduced threshold to 0.1m
 
                 if (shouldAddPoint) {
                   dataChanged = true;
@@ -5237,6 +5330,11 @@
                     payload: site.load || 0,
                     speed: site.speed || 0,
                   });
+
+                  // Limit history to 1000 points max
+                  if (pathHistory[haulerId].length > 1000) {
+                    pathHistory[haulerId] = pathHistory[haulerId].slice(-500);
+                  }
                 }
 
                 if (sites[haulerId]) {
@@ -5572,8 +5670,15 @@
               haulerSelector.appendChild(d3Option);
             }
 
+            if (haulers["D7"]) {
+              const d7Option = document.createElement("option");
+              d7Option.value = "D7";
+              d7Option.text = `${getDisplayName("D7")} (Excavator)`;
+              haulerSelector.appendChild(d7Option);
+            }
+
             const otherHaulerIds = Object.keys(haulers)
-              .filter((id) => id !== "D3")
+              .filter((id) => id !== "D3" && id !== "D7")
               .sort((a, b) => a.localeCompare(b));
             otherHaulerIds.forEach((id) => {
               const opt = document.createElement("option");

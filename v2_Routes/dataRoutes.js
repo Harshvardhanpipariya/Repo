@@ -2,11 +2,11 @@ const express = require("express");
 const router = express.Router();
 const {
   insertRealtimeData,
-  fetchDashboardDataby
+  fetchDashboardDataby,
 } = require("../v2_Controllers/Real_Time_Data_Controller/DataController");
+const authenticateToken = require("../v2_Middlewares/authMiddleware");
 
-
-
+// router.use(authenticateToken); // Apply authentication middleware to all routes in this router
 
 /// Example of the expected JSON body for inserting real-time sensor data sensors can be dynamic
 // and may include various types of sensor readings

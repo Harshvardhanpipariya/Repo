@@ -5,7 +5,7 @@ const authenticateToken = (req, res, next) => {
 
   if (!authHeader) {
     return res.status(401).json({
-      message: "Access denied. No token provided.",
+      message: "Access denied. No token provided",
     });
   }
 
@@ -13,20 +13,21 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) {
     return res.status(401).json({
-      message: "Invalid token format.",
+      message: "Invalid token format",
     });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({
-        message: "Invalid or expired token.",
-      });
-    }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.user = decoded;
-    next();
-  });
+    req.user = decoded; // attach user info to request
+
+    next(); // move to next middleware / route
+  } catch (error) {
+    return res.status(403).json({
+      message: "Invalid or expired token",
+    });
+  }
 };
 
 module.exports = authenticateToken;

@@ -1,21 +1,25 @@
 const express = require("express");
-const router = express.Router();
 const fetch = require("./routes/fetch");
 const insert = require("./routes/insert");
 const path = require("path");
 const cors = require("cors");
-const fs = require("fs");
-const db = require("./dao/dao");
 require("dotenv").config();
+
 const app = express();
 
 app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
-app.use("/models", express.static("temp_models"));
 app.use(express.json({ limit: "200mb" }));
 app.use(express.urlencoded({ extended: true, limit: "200mb" }));
+
+// ✅ Serve React build (VERY IMPORTANT)
+app.use(express.static(path.join(__dirname, "public")));
+
+// Serve temp models
+app.use("/models", express.static("temp_models"));
+
 const PORT = 5001;
+
+// ================= API ROUTES =================
 
 // Company/region APIs
 app.get("/getcompanies", fetch.getcompanies);
@@ -26,15 +30,13 @@ app.get("/getregions", fetch.getregions);
 app.get("/api/get_last_10_zaxis", insert.getLast10ZAxis);
 app.post("/insert-realtime-data", insert.insertRealtimeData);
 
-// Auth / Registration
+// Auth
 app.post("/register", insert.register);
 app.post("/signin", insert.signin);
 app.post("/forgot-password", insert.forgotPassword);
-
-// New: register FCM token from Flutter
 app.post("/register-token", insert.registerToken);
 
-//fetching data based on shift wise, daily, monthly
+// Data APIs
 app.get("/getAll-Devices-MonthlyData", insert.getAllDevicesMonthlyData);
 app.get("/getDevice-MonthlyData", insert.getDeviceMonthlyData);
 app.get("/getAllDevices-DailyData", insert.getAllDevicesDailyData);
@@ -43,52 +45,26 @@ app.get("/getAllDevices-ShiftData", insert.getAllDevicesShiftData);
 app.get("/getDevice-ShiftData", insert.getDeviceShiftData);
 
 app.get("/generate-analysis", insert.generateAnalysisReport);
-// Device list endpoint
 app.get("/api/devices", insert.getDevices);
 app.get("/fetchDashboardDataby", insert.fetchDashboardDataby);
 
 // Test route
-
 app.post("/test", (req, res) => {
-  console.log("Test API called with:", req.body);
   res.json({ message: "Test successful", received: req.body });
 });
 
-// Dashboard route (serves dashboard.html with latest data)
-// Dashboard route
-app.get("/dashboard", (req, res) => {
-  const sql =
-    "SELECT * FROM realtime_sensor_data ORDER BY timestamp DESC LIMIT 1";
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error("DB query error:", err);
-      return res.status(500).send("Failed to load dashboard");
-    }
+// ================= FRONTEND ROUTES =================
 
-    const dashboardData = results.length > 0 ? results[0] : {};
-
-    let html;
-    try {
-      html = fs.readFileSync(
-        path.join(__dirname, "public", "dashboard.html"),
-        "utf8",
-      );
-    } catch (fileErr) {
-      console.error("Error reading dashboard.html:", fileErr);
-      return res.status(500).send("Failed to load dashboard HTML");
-    }
-
-    const scriptTag = `<script>const dashboardData = ${JSON.stringify(dashboardData)};</script>`;
-    const updatedHtml = html.replace("</body>", `${scriptTag}</body>`);
-
-    res.send(updatedHtml);
-  });
-});
-
-//Root
+// ✅ Root route → also serve React app
 app.get("/", (req, res) => {
-  res.send("");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+// ✅ SPA fallback (VERY IMPORTANT)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 
 //********************************************************************/
 //+++++++FROM HERE ONWARDS , IM WRITING NEW CODE FOR VERSION 2.0+++++++
@@ -106,7 +82,7 @@ app.use("/v2/data", require("./v2_Routes/dataRoutes"));
 app.use("/v2/device", require("./v2_Routes/devicesRoutes"));
 app.use("/v2/dailyData", require("./v2_Routes/dailyDataRoutes"));
 app.use("/v2/monthlyData", require("./v2_Routes/monthlyDataRoutes"));
-app.use("/v2/getLast10ZAxis", require("./v2_Routes/getLast10ZAxisRoute")); 
+app.use("/v2/getLast10ZAxis", require("./v2_Routes/getLast10ZAxisRoute"));
 app.use("/v2/shiftData", require("./v2_Routes/shiftWiseDataRoutes"));
 app.use("/v2/analysis", require("./v2_Routes/generateAnalysisReportRoutes"));
 connectMongoDB();
