@@ -269,7 +269,9 @@ const fetchDashboardDataby = async (req, res) => {
         error: "Company and region are required",
       });
     }
-console.log(`📊 Fetching dashboard data for company ${companyId}, region ${region}`);
+    console.log(
+      `📊 Fetching dashboard data for company ${companyId}, region ${region}`,
+    );
     const regionName = region.trim();
 
     // 1️⃣ Find region belonging to company
@@ -347,4 +349,213 @@ console.log(`📊 Fetching dashboard data for company ${companyId}, region ${reg
   }
 };
 
-module.exports = { insertRealtimeData, fetchDashboardDataby };
+const fetchMinePlannerData = async (req, res) => {
+  try {
+    const { companyId, region } = req.query;
+
+    if (!companyId || !region) {
+      return res.status(400).json({
+        error: "companyId and region are required",
+      });
+    }
+
+    const regionName = region.trim();
+
+    // 1️⃣ Find region
+    const regionDoc = await Region.findOne({
+      region_name: regionName,
+      company: companyId,
+    });
+
+    if (!regionDoc) {
+      return res.status(404).json({ error: "Region not found" });
+    }
+
+    // 2️⃣ Devices
+    const devices = await Device.find({
+      region_id: regionDoc._id,
+      device_type: "kache_box",
+    }).select("_id device_name");
+
+    if (!devices.length) {
+      return res.status(404).json({
+        error: "No kache devices found",
+      });
+    }
+
+    const deviceIds = devices.map((d) => d._id);
+
+    // 🕒 Time
+    const now = new Date();
+    const last24Hours = new Date(now - 24 * 60 * 60 * 1000);
+    const last7Days = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+    // =========================================================
+    // 1️⃣ LAT/LONG (24h + fallback)
+    // =========================================================
+    const nowUTC = new Date();
+    const last24HoursUTC = new Date(nowUTC.getTime() - 24 * 60 * 60 * 1000);
+
+    // ✅ SINGLE QUERY FOR ALL DEVICES
+    const locationData = await RealtimeSensorData.find({
+      "meta.device_id": { $in: deviceIds },
+      timestamp: {
+        $gte: last24HoursUTC,
+        $lte: nowUTC,
+      },
+    })
+      .sort({ "meta.device_id": 1, timestamp: 1 }) // group-friendly sort
+      .select("meta.device_id timestamp sensors.latitude sensors.longitude");
+
+    console.log(
+      `📍 Fetched ${locationData} location records for last 24h for devices in region ${regionName}`,
+    );
+    // ✅ GROUP IN MEMORY
+    const latLongMap = {};
+
+    locationData.forEach((d) => {
+      if (!d?.meta?.device_id) return;
+
+      const id = d.meta.device_id.toString();
+
+      if (!latLongMap[id]) latLongMap[id] = [];
+
+      const lat = d.sensors?.get("latitude");
+      const lng = d.sensors?.get("longitude");
+
+      if (lat == null || lng == null) return;
+
+      latLongMap[id].push({
+        latitude: Number(lat.toFixed(6)),
+        longitude: Number(lng.toFixed(6)),
+        timestamp: d.timestamp,
+      });
+    });
+    // =========================================================
+    // 2️⃣ LAST 6
+    // =========================================================
+    const last6Data = await RealtimeSensorData.aggregate([
+      {
+        $match: {
+          "meta.device_id": { $in: deviceIds },
+        },
+      },
+      { $sort: { timestamp: -1 } },
+      {
+        $group: {
+          _id: "$meta.device_id",
+          entries: {
+            $push: {
+              timestamp: "$timestamp",
+              sensors: "$sensors",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          entries: { $slice: ["$entries", 6] },
+        },
+      },
+    ]);
+
+    const last6Map = {};
+    last6Data.forEach((d) => {
+      last6Map[d._id.toString()] = d.entries;
+    });
+
+    // =========================================================
+    // 3️⃣ FUEL
+    // =========================================================
+    const fuelData = await RealtimeSensorData.aggregate([
+      {
+        $match: {
+          "meta.device_id": { $in: deviceIds },
+          timestamp: { $gte: last7Days },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            device: "$meta.device_id",
+            day: { $dayOfWeek: "$timestamp" },
+          },
+          totalFuel: { $sum: "$sensors.fuel" },
+        },
+      },
+    ]);
+
+    const daysMap = {
+      1: "Sunday",
+      2: "Monday",
+      3: "Tuesday",
+      4: "Wednesday",
+      5: "Thursday",
+      6: "Friday",
+      7: "Saturday",
+    };
+
+    const fuelMap = {};
+
+    fuelData.forEach((d) => {
+      const deviceId = d._id.device.toString();
+      const dayName = daysMap[d._id.day];
+
+      if (!fuelMap[deviceId]) fuelMap[deviceId] = {};
+      fuelMap[deviceId][dayName] = d.totalFuel;
+    });
+
+    const orderedDays = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+
+    // =========================================================
+    // FINAL RESPONSE
+    // =========================================================
+    const equipmentList = devices.map((device) => {
+      const id = device._id.toString();
+
+      const latestSensor = last6Map[id]?.[0]?.sensors || {};
+
+      const fuelWeek = {};
+      orderedDays.forEach((day) => {
+        fuelWeek[day] = fuelMap[id]?.[day] || 0;
+      });
+
+      return {
+        vehicleId: id,
+        name: device.device_name,
+
+        latitude: latestSensor.latitude || null,
+        longitude: latestSensor.longitude || null,
+        altitude: latestSensor.altitude || null,
+
+        latLong_24h: latLongMap[id] || [],
+        last6Entries: last6Map[id] || [],
+
+        fuelCost_week: fuelWeek,
+      };
+    });
+
+    return res.json({
+      status: "success",
+      device_type: "kache_box",
+      totalDevices: equipmentList.length,
+      equipmentList,
+    });
+  } catch (err) {
+    console.error("❌ Mine Planner Error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+module.exports = {
+  insertRealtimeData,
+  fetchDashboardDataby,
+  fetchMinePlannerData,
+};

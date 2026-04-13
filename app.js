@@ -53,17 +53,7 @@ app.post("/test", (req, res) => {
   res.json({ message: "Test successful", received: req.body });
 });
 
-// ================= FRONTEND ROUTES =================
 
-// ✅ Root route → also serve React app
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// ✅ SPA fallback (VERY IMPORTANT)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
 
 
 //********************************************************************/
@@ -86,6 +76,19 @@ app.use("/v2/getLast10ZAxis", require("./v2_Routes/getLast10ZAxisRoute"));
 app.use("/v2/shiftData", require("./v2_Routes/shiftWiseDataRoutes"));
 app.use("/v2/analysis", require("./v2_Routes/generateAnalysisReportRoutes"));
 connectMongoDB();
+
+
+// ================= FRONTEND ROUTES =================
+
+// ✅ Root route → also serve React app
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ✅ SPA fallback (VERY IMPORTANT)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 // Start server
 app.listen(PORT, "0.0.0.0", () => {

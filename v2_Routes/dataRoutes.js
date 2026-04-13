@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   insertRealtimeData,
   fetchDashboardDataby,
+  fetchMinePlannerData
 } = require("../v2_Controllers/Real_Time_Data_Controller/DataController");
 const authenticateToken = require("../v2_Middlewares/authMiddleware");
 
@@ -30,4 +31,6 @@ router.post("/insert", insertRealtimeData);
 // /fetchDashboardDataBy?companyId=5fasarq2342&region=North
 router.get("/fetchDashboardDataBy", fetchDashboardDataby);
 
+
+router.get("/fetchMinePlannerData", fetchMinePlannerData);  
 module.exports = router;
