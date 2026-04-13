@@ -11,7 +11,7 @@ const realtimeSensorDataSchema = new mongoose.Schema(
         index: true,
       },
 
-      mounted_to: {
+      equipment_name: {
         type: String,
         required: true,
       },

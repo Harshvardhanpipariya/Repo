@@ -20,7 +20,7 @@ const insertRealtimeData = async (req, res) => {
     console.log(`📡 Received data from device ${req.body._id}`, req.body);
 
     // Extract device ID, mount info, and sensor readings from request
-    const { _id, mounted_to, sensors } = req.body;
+    const { _id, equipment_name, sensors } = req.body;
 
     // Validate required device ID
     if (!_id) {
@@ -85,7 +85,7 @@ const insertRealtimeData = async (req, res) => {
       const realtimeDoc = new RealtimeSensorData({
         meta: {
           device_id: _id,
-          mounted_to: mounted_to,
+          equipment_name: equipment_name,
           region_id: region,
         },
         timestamp: deviceTimestamp,
@@ -224,7 +224,7 @@ const insertRealtimeData = async (req, res) => {
     const realtimeDoc = new RealtimeSensorData({
       meta: {
         device_id: _id,
-        mounted_to: mounted_to,
+        equipment_name: equipment_name,
         region_id: region,
       },
       timestamp: deviceTimestamp,
@@ -554,8 +554,110 @@ const fetchMinePlannerData = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
+const fetchDumpCount = async (req, res) => {
+  try {
+    const { companyId, region } = req.query;
+
+    if (!companyId || !region) {
+      return res.status(400).json({
+        error: "Company and region are required",
+      });
+    }
+
+    const regionName = region.trim();
+
+    // 1️⃣ Find region
+    const regionDoc = await Region.findOne({
+      region_name: regionName,
+      company: companyId,
+    });
+
+    if (!regionDoc) {
+      return res.status(404).json({
+        error: "Region not found",
+      });
+    }
+
+    // 2️⃣ Get devices
+    const devices = await Device.find({
+      region_id: regionDoc._id,
+      device_type: "lora_box",
+    }).select("_id device_name");
+
+    if (!devices.length) {
+      return res.status(404).json({
+        error: "No devices found",
+      });
+    }
+
+    const deviceIds = devices.map((d) => d._id);
+
+    // 3️⃣ Get latest entry per device
+    const latestData = await RealtimeSensorData.aggregate([
+      {
+        $match: {
+          "meta.device_id": { $in: deviceIds },
+        },
+      },
+      {
+        $sort: { timestamp: -1 },
+      },
+      {
+        $group: {
+          _id: "$meta.device_id",
+          timestamp: { $first: "$timestamp" },
+          sensors: { $first: "$sensors" },
+        },
+      },
+    ]);
+
+    // 4️⃣ Convert to frontend format
+    const responseMap = {};
+
+    devices.forEach((device) => {
+      const id = device._id.toString();
+
+      const found = latestData.find((d) => d._id.toString() === id);
+
+      // 🔥 IMPORTANT: sensors is Map → convert
+      let count = 0;
+
+      if (found?.sensors) {
+        const sensorsObj =
+          found.sensors instanceof Map
+            ? Object.fromEntries(found.sensors)
+            : found.sensors;
+
+        count = sensorsObj.count || 0; // 👈 YOUR DUMP COUNT FIELD
+      }
+
+      responseMap[id] = {
+        device_name: device.device_name,
+        latest: {
+          count,
+          timestamp: found?.timestamp || null,
+        },
+      };
+    });
+
+    return res.json({
+      status: "success",
+      company: companyId,
+      region: regionName,
+      totalDevices: devices.length,
+      devices: responseMap,
+    });
+  } catch (err) {
+    console.error("❌ Dump Count Error:", err);
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
+};
 module.exports = {
   insertRealtimeData,
   fetchDashboardDataby,
   fetchMinePlannerData,
+  fetchDumpCount
 };

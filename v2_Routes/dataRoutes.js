@@ -3,7 +3,8 @@ const router = express.Router();
 const {
   insertRealtimeData,
   fetchDashboardDataby,
-  fetchMinePlannerData
+  fetchMinePlannerData,
+  fetchDumpCount
 } = require("../v2_Controllers/Real_Time_Data_Controller/DataController");
 const authenticateToken = require("../v2_Middlewares/authMiddleware");
 
@@ -32,5 +33,7 @@ router.post("/insert", insertRealtimeData);
 router.get("/fetchDashboardDataBy", fetchDashboardDataby);
 
 
-router.get("/fetchMinePlannerData", fetchMinePlannerData);  
+router.get("/fetchMinePlannerData", fetchMinePlannerData);
+
+router.get("/fetchDumpCount", fetchDumpCount);
 module.exports = router;
