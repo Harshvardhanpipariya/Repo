@@ -197,6 +197,9 @@ const insertRealtimeData = async (req, res) => {
 
       let movementNumeric = 0;
 
+      const movementRaw = sensorData.movement || "FLAT";
+      const movement = movementRaw.toUpperCase();
+
       if (movement === "DOWN" || movement === "DOWNHILL") movementNumeric = -10;
       else if (movement === "UP" || movement === "UPHILL") movementNumeric = 10;
       else if (movement === "STABLE" || movement === "FLAT")
