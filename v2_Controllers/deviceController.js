@@ -3,10 +3,15 @@ const region = require("../v2_Models/Region");
 
 const createDevice = async (req, res) => {
   try {
-    const { device_name, region_name, installation_date, software_version } =
-      req.body;
+    const {
+      device_name,
+      device_type,
+      region_name,
+      installation_date,
+      software_version,
+    } = req.body;
 
-    if (!device_name || !region_name) {
+    if (!device_name || !device_type || !region_name) {
       return res
         .status(400)
         .json({ message: "Device name and region name are required" });
@@ -19,6 +24,7 @@ const createDevice = async (req, res) => {
       region_id: regionId._id,
       installation_date: installation_date,
       software_version: software_version,
+      device_type: device_type,
     });
     await newDevice.save();
     res.status(201).json(newDevice);
