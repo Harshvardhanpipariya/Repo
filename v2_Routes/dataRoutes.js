@@ -5,7 +5,7 @@ const {
   fetchDashboardDataby,
   fetchMinePlannerData,
   fetchDumpCount
-} = require("../v2_Controllers/Real_Time_Data_Controller/DataController");
+} = require("../v2_Controllers/Real_Time_Data_Controller/dataController");
 const authenticateToken = require("../v2_Middlewares/authMiddleware");
 
 // router.use(authenticateToken); // Apply authentication middleware to all routes in this router
