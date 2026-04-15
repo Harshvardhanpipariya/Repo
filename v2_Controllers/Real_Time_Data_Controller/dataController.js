@@ -65,7 +65,7 @@ const insertRealtimeData = async (req, res) => {
       .sort({ timestamp: -1 })
       .lean();
 
-    console.log("🔍 Previous record:", prev ? prev._id : "None");
+    console.log("🔍 Previous record:", prev ? prev.sensors.count : "None");
 
     /*
     ==========================
@@ -102,152 +102,186 @@ const insertRealtimeData = async (req, res) => {
       });
     }
 
-    /*
+    if (device.device_type == "lora_box") {
+      console.log("storing lora box data");
+
+      // Remove null/undefined fields to keep database clean
+      sensorData = removeEmptyFields(sensorData);
+
+      // Create new document with metadata and raw sensor readings
+      const realtimeDoc = new RealtimeSensorData({
+        meta: {
+          device_id: _id,
+          equipment_name: equipment_name,
+          region_id: region,
+        },
+        timestamp: deviceTimestamp,
+        sensors: sensorData,
+      });
+
+      // Persist to database
+      const saved = await realtimeDoc.save();
+      console.log("stored lora box data");
+      return res.json({
+        status: "success",
+        message: "Lora box data stored",
+        inserted_id: saved._id,
+      });
+    } else if (device.device_type == "kache_box") {
+      console.log("storing kache box data");
+
+      /*
     ==========================
     NORMAL FLOW (Subsequent entries)
     ==========================
     Calculate delta metrics compared to previous record
     */
 
-    // Parse current GPS latitude
-    const latitude =
-      sensorData.latitude !== undefined
-        ? parseFloat(sensorData.latitude)
-        : null;
+      // Parse current GPS latitude
+      const latitude =
+        sensorData.latitude !== undefined
+          ? parseFloat(sensorData.latitude)
+          : null;
 
-    // Parse current GPS longitude
-    const longitude =
-      sensorData.longitude !== undefined
-        ? parseFloat(sensorData.longitude)
-        : null;
+      // Parse current GPS longitude
+      const longitude =
+        sensorData.longitude !== undefined
+          ? parseFloat(sensorData.longitude)
+          : null;
 
-    // Parse pitch/inclination (default 0 if flat)
-    const pitch =
-      sensorData.pitch !== undefined ? parseFloat(sensorData.pitch) : 0;
+      // Parse pitch/inclination (default 0 if flat)
+      const pitch =
+        sensorData.pitch !== undefined ? parseFloat(sensorData.pitch) : 0;
 
-    // Parse altitude above sea level
-    const altitude =
-      sensorData.altitude !== undefined
-        ? parseFloat(sensorData.altitude)
-        : null;
+      // Parse altitude above sea level
+      const altitude =
+        sensorData.altitude !== undefined
+          ? parseFloat(sensorData.altitude)
+          : null;
 
-    // Movement direction or status
-    const movement = sensorData.movement || "FLAT";
+      // Movement direction or status
+      const movement = sensorData.movement || "FLAT";
 
-    // Initialize calculation variables
-    let distance = 0; // Haversine distance in km
-    let timeDiffHours = 0; // Time elapsed since last reading
+      // Initialize calculation variables
+      let distance = 0; // Haversine distance in km
+      let timeDiffHours = 0; // Time elapsed since last reading
 
-    // Extract previous coordinates
-    const prevLat = prev.sensors?.latitude;
-    const prevLon = prev.sensors?.longitude;
+      // Extract previous coordinates
+      const prevLat = prev.sensors?.latitude;
+      const prevLon = prev.sensors?.longitude;
 
-    // Calculate distance traveled using Haversine formula
-    // Only if both previous and current coordinates exist
-    if (
-      prevLat !== undefined &&
-      prevLon !== undefined &&
-      latitude !== null &&
-      longitude !== null
-    ) {
-      distance = haversineKm(
-        [parseFloat(prevLat), parseFloat(prevLon)],
-        [latitude, longitude],
-      );
-    }
+      // Calculate distance traveled using Haversine formula
+      // Only if both previous and current coordinates exist
+      if (
+        prevLat !== undefined &&
+        prevLon !== undefined &&
+        latitude !== null &&
+        longitude !== null
+      ) {
+        distance = haversineKm(
+          [parseFloat(prevLat), parseFloat(prevLon)],
+          [latitude, longitude],
+        );
+      }
 
-    // Calculate time elapsed since previous reading (in hours)
-    const prevTime = new Date(prev.timestamp);
-    timeDiffHours = Math.max(0, (deviceTimestamp - prevTime) / 3600000);
+      // Calculate time elapsed since previous reading (in hours)
+      const prevTime = new Date(prev.timestamp);
+      timeDiffHours = Math.max(0, (deviceTimestamp - prevTime) / 3600000);
 
-    /*
+      /*
     ==========================
     MOVEMENT CONVERSION
     Movement text strings converted to numeric values for calculations
     ==========================
     */
 
-    let movementNumeric = 0;
+      let movementNumeric = 0;
 
-    if (movement === "DOWN" || movement === "DOWNHILL") movementNumeric = -10;
-    else if (movement === "UP" || movement === "UPHILL") movementNumeric = 10;
-    else if (movement === "STABLE" || movement === "FLAT") movementNumeric = 0;
-    else movementNumeric = parseFloat(movement) || 0;
+      if (movement === "DOWN" || movement === "DOWNHILL") movementNumeric = -10;
+      else if (movement === "UP" || movement === "UPHILL") movementNumeric = 10;
+      else if (movement === "STABLE" || movement === "FLAT")
+        movementNumeric = 0;
+      else movementNumeric = parseFloat(movement) || 0;
 
-    /*
+      /*
     ==========================
     FUEL CALCULATION
     Compute fuel consumption and associated cost based on metrics
     ==========================
     */
 
-    const segmentFuelResult = calculateFuelAndCost(
-      distance,
-      pitch,
-      movementNumeric,
-      _id,
-      timeDiffHours,
-    );
+      const segmentFuelResult = calculateFuelAndCost(
+        distance,
+        pitch,
+        movementNumeric,
+        _id,
+        timeDiffHours,
+      );
 
-    /*
+      /*
     ==========================
     RL (Reduced Level) CALCULATION
     Convert altitude to RL using sea level reference point
     ==========================
     */
 
-    const rl =
-      altitude !== null ? Number((altitude + SEA_LEVEL_RL).toFixed(2)) : null;
+      const rl =
+        altitude !== null ? Number((altitude + SEA_LEVEL_RL).toFixed(2)) : null;
 
-    /*
+      /*
     ==========================
     ADD CALCULATED VALUES TO SENSOR DATA
     ==========================
     */
+      console.log(
+        "🚀 movementNumeric:",
+        movementNumeric,
+        typeof movementNumeric,
+      );
+      sensorData.distance = distance; // Distance traveled since last record
+      sensorData.fuel = segmentFuelResult.fuel; // Fuel consumed (Liters)
+      sensorData.fuel_cost = segmentFuelResult.cost; // Cost of fuel consumed (₹)
+      sensorData.rl = rl; // Reduced level from altitude
+      sensorData.movement = movementNumeric;
+      // Clean up null/undefined fields before storage
+      sensorData = removeEmptyFields(sensorData);
 
-    sensorData.distance = distance; // Distance traveled since last record
-    sensorData.fuel = segmentFuelResult.fuel; // Fuel consumed (Liters)
-    sensorData.fuel_cost = segmentFuelResult.cost; // Cost of fuel consumed (₹)
-    sensorData.rl = rl; // Reduced level from altitude
+      console.log("📦 Final Sensors Data:", sensorData);
 
-    // Clean up null/undefined fields before storage
-    sensorData = removeEmptyFields(sensorData);
-
-    console.log("📦 Final Sensors Data:", sensorData);
-
-    /*
+      /*
     ==========================
     SAVE DOCUMENT TO DATABASE
     ==========================
     */
 
-    const realtimeDoc = new RealtimeSensorData({
-      meta: {
-        device_id: _id,
-        equipment_name: equipment_name,
-        region_id: region,
-      },
-      timestamp: deviceTimestamp,
-      sensors: sensorData,
-    });
+      const realtimeDoc = new RealtimeSensorData({
+        meta: {
+          device_id: _id,
+          equipment_name: equipment_name,
+          region_id: region,
+        },
+        timestamp: deviceTimestamp,
+        sensors: sensorData,
+      });
 
-    console.log("💾 Saving document to database...");
-    const saved = await realtimeDoc.save();
+      console.log("💾 Saving document to database...");
+      const saved = await realtimeDoc.save();
 
-    // Log final calculated metrics
-    console.log("\n✅ FINAL RESULT");
-    console.log(`Device: ${_id}`);
-    console.log(`Distance: ${(distance * 1000).toFixed(2)} m`);
-    console.log(`Fuel: ${(segmentFuelResult.fuel * 1000).toFixed(2)} mL`);
-    console.log(`Fuel Cost: ₹${segmentFuelResult.cost.toFixed(4)}`);
-    console.log(`RL: ${rl}\n`);
+      // Log final calculated metrics
+      console.log("\n✅ FINAL RESULT");
+      console.log(`Device: ${_id}`);
+      console.log(`Distance: ${(distance * 1000).toFixed(2)} m`);
+      console.log(`Fuel: ${(segmentFuelResult.fuel * 1000).toFixed(2)} mL`);
+      console.log(`Fuel Cost: ₹${segmentFuelResult.cost.toFixed(4)}`);
+      console.log(`RL: ${rl}\n`);
 
-    // Return success response with inserted document ID
-    res.json({
-      status: "success",
-      message: "Realtime data stored",
-      inserted_id: saved._id,
-    });
+      // Return success response with inserted document ID
+      res.json({
+        status: "success",
+        message: "Realtime data stored",
+        inserted_id: saved._id,
+      });
+    }
   } catch (error) {
     // Handle any database or processing errors
     console.error("❌ Insert error:", error);
@@ -659,5 +693,5 @@ module.exports = {
   insertRealtimeData,
   fetchDashboardDataby,
   fetchMinePlannerData,
-  fetchDumpCount
+  fetchDumpCount,
 };
