@@ -8,7 +8,7 @@ const Company = require("../v2_Models/Company.js");
 ========================= */
 const logIn = async (req, res) => {
   try {
-    const { phone_no, password } = req.body;
+    let { phone_no, password } = req.body;
 
     if (!phone_no || !password) {
       return res.status(400).json({
@@ -16,9 +16,31 @@ const logIn = async (req, res) => {
       });
     }
 
-    // 🔍 Find user by phone number
-    const user = await User.findOne({ phone_no });
+    // 🔥 Normalize phone (VERY IMPORTANT)
+    const normalizePhone = (phone) => {
+      let digits = phone.replace(/\D/g, "");
+      if (digits.length === 10) return "+91" + digits;
+      if (digits.startsWith("91")) return "+" + digits;
+      return "+" + digits;
+    };
 
+    phone_no = normalizePhone(phone_no);
+
+
+    console.log("Normalized phone number:", phone_no);
+
+    // 🔍 Find user + populate
+    const user = await User.findOne({ phone_no })
+      .populate({
+        path: "company",
+        select: "company_name company_location sector",
+        populate: {
+          path: "sector",
+          select: "sector_name",
+        },
+      })
+      .populate("sector", "sector_name");
+console.log("User found:", user);
     if (!user) {
       return res.status(401).json({
         message: "Invalid credentials",
@@ -27,14 +49,14 @@ const logIn = async (req, res) => {
 
     // 🔐 Compare password
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log("Password match:", isMatch);
+
     if (!isMatch) {
       return res.status(401).json({
         message: "Invalid credentials",
       });
     }
 
-    // 🎟 Generate JWT
+    // 🎟 JWT
     const token = jwt.sign(
       {
         userId: user._id,
@@ -42,9 +64,10 @@ const logIn = async (req, res) => {
         phone_no: user.phone_no,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "7d" }
     );
 
+    // ✅ Clean response (BEST PRACTICE)
     return res.status(200).json({
       message: "Login successful",
       token,
@@ -53,8 +76,12 @@ const logIn = async (req, res) => {
         name: user.name,
         email: user.email,
         phone_no: user.phone_no,
-        company: user.company,
-        regions: user.regions,
+        company: {
+          name: user.company?.company_name,
+          location: user.company?.company_location,
+          sector: user.company?.sector?.sector_name,
+        },
+        sectors: user.sector?.map((s) => s.sector_name),
       },
     });
   } catch (error) {
