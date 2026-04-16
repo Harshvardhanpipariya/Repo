@@ -160,7 +160,7 @@ const insertRealtimeData = async (req, res) => {
           : null;
 
       // Movement direction or status
-      const movement = sensorData.movement || "FLAT";
+      const movementRaw = sensorData.movement || "FLAT";
 
       // Initialize calculation variables
       let distance = 0; // Haversine distance in km
@@ -196,8 +196,6 @@ const insertRealtimeData = async (req, res) => {
     */
 
       let movementNumeric = 0;
-
-      const movementRaw = sensorData.movement || "FLAT";
       const movement = movementRaw.toUpperCase();
 
       if (movement === "DOWN" || movement === "DOWNHILL") movementNumeric = -10;
