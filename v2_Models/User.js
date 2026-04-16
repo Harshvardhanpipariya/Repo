@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema(
     },
 
     // 🔥 Many-to-Many stored directly
-    sector: [{ type: mongoose.Schema.Types.ObjectId, ref: "sector" }],
+    sector: [{ type: mongoose.Schema.Types.ObjectId, ref: "Sector" }],
   },
   { timestamps: true },
 );
