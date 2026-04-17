@@ -72,9 +72,10 @@ const getCompanies = async (req, res) => {
       });
     }
 
-    const companies = await Company.find({ sector: sectorDoc._id })
+    const companies = await Company.find({
+      sectors: sectorDoc._id,
+    })
       .select("company_name company_mail company_location")
-      .populate("sector", "sector_name")
       .sort({ createdAt: 1 });
 
     return res.status(200).json(companies);

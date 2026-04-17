@@ -33,8 +33,7 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 🔥 Many-to-Many stored directly
-    sector: [{ type: mongoose.Schema.Types.ObjectId, ref: "Sector" }],
+    regions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Region" }],
   },
   { timestamps: true },
 );

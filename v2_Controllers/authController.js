@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../v2_Models/User.js");
 const Sector = require("../v2_Models/Sector.js");
 const Company = require("../v2_Models/Company.js");
+const Region = require("../v2_Models/Region.js");
 /* =========================
    LOGIN
 ========================= */
@@ -26,21 +27,19 @@ const logIn = async (req, res) => {
 
     phone_no = normalizePhone(phone_no);
 
-
     console.log("Normalized phone number:", phone_no);
 
     // 🔍 Find user + populate
     const user = await User.findOne({ phone_no })
       .populate({
         path: "company",
-        select: "company_name company_location sector",
-        populate: {
-          path: "sector",
-          select: "sector_name",
-        },
+        select: "company_name company_location sectors",
       })
-      .populate("sector", "sector_name");
-console.log("User found:", user);
+      .populate({
+        path: "regions",
+        select: "region_name",
+      });
+    console.log("User found:", user);
     if (!user) {
       return res.status(401).json({
         message: "Invalid credentials",
@@ -64,10 +63,11 @@ console.log("User found:", user);
         phone_no: user.phone_no,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     // ✅ Clean response (BEST PRACTICE)
+
     return res.status(200).json({
       message: "Login successful",
       token,
@@ -77,11 +77,11 @@ console.log("User found:", user);
         email: user.email,
         phone_no: user.phone_no,
         company: {
+          id: user.company?._id,
           name: user.company?.company_name,
           location: user.company?.company_location,
-          sector: user.company?.sector?.sector_name,
         },
-        sectors: user.sector?.map((s) => s.sector_name),
+        regions: user.regions || [],
       },
     });
   } catch (error) {
@@ -97,12 +97,12 @@ console.log("User found:", user);
 ========================= */
 const signUp = async (req, res) => {
   try {
-    const { name, email, phone_no, password, company, sector } = req.body;
-
+    let { name, email, phone_no, password, company, regions } = req.body;
+    console.log("Signup data received:", req.body);
     // 🔎 Basic Validation
-    if (!name || !email || !phone_no || !password) {
+    if (!name || !email || !phone_no || !password || !company) {
       return res.status(400).json({
-        message: "Name, email, phone number and password are required",
+        message: "All required fields are missing",
       });
     }
 
@@ -113,7 +113,14 @@ const signUp = async (req, res) => {
       });
     }
 
-    // 🔹 1️⃣ Fetch company from DB
+    // 🔥 Normalize regions (VERY IMPORTANT)
+    const regionArray = regions
+      ? [...new Set(Array.isArray(regions) ? regions : [regions])]
+      : [];
+
+    console.log("Normalized regions:", regionArray);
+
+    // 🔹 1️⃣ Fetch company
     const companyDoc = await Company.findOne({ company_name: company });
 
     if (!companyDoc) {
@@ -122,23 +129,23 @@ const signUp = async (req, res) => {
       });
     }
 
-    // 🔹 2️⃣ Validate sector(s) under that company
-    let sectorIds = [];
+    // 🔥 2️⃣ Validate regions (must belong to company)
+    let regionIds = [];
 
-    if (sector) {
-      const sectorArray = Array.isArray(sector) ? sector : [sector];
-
-      const validSectors = await Sector.find({
-        sector_name: { $in: sectorArray },
+    if (regionArray.length > 0) {
+      const regionDocs = await Region.find({
+        _id: { $in: regionArray },
+        company: companyDoc._id, // 🔥 IMPORTANT
       });
+      console.log(regionDocs.length, regionArray.length);
 
-      if (validSectors.length !== sectorArray.length) {
+      if (regionDocs.length !== regionArray.length) {
         return res.status(400).json({
-          message: "One or more sectors are invalid",
+          message: "One or more regions are invalid for this company",
         });
       }
 
-      sectorIds = validSectors.map((s) => s._id);
+      regionIds = regionDocs.map((r) => r._id);
     }
 
     // 🔍 Check duplicate user
@@ -148,21 +155,21 @@ const signUp = async (req, res) => {
 
     if (existingUser) {
       return res.status(409).json({
-        message: "User with this email or phone number already exists",
+        message: "User already exists",
       });
     }
 
     // 🔐 Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 🆕 Create user (FIXED PART)
+    // ✅ Create user
     const newUser = await User.create({
       name,
       email,
       phone_no,
       password: hashedPassword,
-      company: companyDoc._id, // ✅ Save ObjectId
-      sector: sectorIds, // ✅ Save ObjectIds
+      company: companyDoc._id,
+      regions: regionIds, // 🔥 SAVE REGIONS HERE
     });
 
     return res.status(201).json({
@@ -173,7 +180,7 @@ const signUp = async (req, res) => {
         email: newUser.email,
         phone_no: newUser.phone_no,
         company: companyDoc.company_name,
-        sector: sector,
+        regions: regionArray,
       },
     });
   } catch (error) {
@@ -181,7 +188,7 @@ const signUp = async (req, res) => {
 
     if (error.code === 11000) {
       return res.status(409).json({
-        message: "Email or phone number already exists",
+        message: "Email or phone already exists",
       });
     }
 
